@@ -21,4 +21,4 @@ def get_client() -> MongoClient:
     return client
 
 def get_collection():
-    return get_client().resume_db["resumes"]
+    return get_client().resumebuilder["resumes"]
