@@ -1,12 +1,13 @@
 from dependencies import get_collection
 from pymongo.errors import PyMongoError
+from model import Resume
 import logging
 
 logger = logging.getLogger(__name__)
 
 def save_section(session_id: str, section: str, data: dict):
     try:
-        col = get_collection()
+        col = get_collection() 
         col.update_one(
             {"session_id": session_id},
             {"$set": {section: data}},
@@ -20,6 +21,17 @@ def get_resume(session_id: str):
     try:
         col = get_collection()
         return col.find_one({"session_id": session_id})
+    except PyMongoError as e:
+        logger.error("Failed to Read document {}: {}", session_id, e)
+        raise
+
+def get_resume_by_email(email: str):
+    try:
+        col= get_collection()
+        resume =col.find_one({"personal_info.email": email})
+        if resume:
+            return Resume(**resume)
+        return None
     except PyMongoError as e:
         logger.error("Failed to Read document {}: {}", session_id, e)
         raise
