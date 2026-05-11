@@ -1,0 +1,71 @@
+AI Resume Builder — Product Overview
+Core
+
+i want to divide the agent flow into following sections
+
+Basic Details
+Professional Summary Details
+Skills
+Professional Experience Section
+Each company,project,roles and responsibilities, achievements
+Certifications
+Personal Projects
+
+Conversational resume builder, section by section
+Base resume as the single source of truth
+4-5 LaTeX templates (minimal, modern, classic, academic, creative)
+PDF export via pdflatex in Docker
+
+Job Targeting
+
+Input a LinkedIn / Naukri / Monster job post URL
+Scrape JD, fall back to paste if blocked
+Fit analysis — score the profile against the JD
+Skill gap analysis — what's missing and how significant
+Tailored resume — derived from base resume, reworded and reordered for the role
+Cover letter — personalized to role, user personality and interests
+
+Skill Assessment
+
+Adaptive 5-10 question assessment per topic
+LLM generated on the fly, no static question bank
+Difficulty adjusts based on answers
+Result — beginner / familiar / proficient / expert
+Feedback — not just a score but why
+Self-rated vs assessed level stored separately
+
+Learning Roadmap
+
+Generated per skill gap
+Tied to assessment results
+What to study and in what order
+
+Tone Setting
+
+Slider — Encouraging → Balanced → Honest → Blunt → Brutal
+Applies only to inward facing features — assessment, fit analysis, gap analysis, resume building conversation
+Cover letter and exported resume always professional
+Saved as user preference across sessions
+Preview of tone before committing
+Soft confirmation gate at brutal end
+
+Structured Elicitation
+
+5 dynamic questions before tailoring / cover letter generation
+Questions generated based on the JD
+One rich LLM call instead of open ended chat
+Controls API costs without limiting quality
+
+Embeddings (v2)
+
+Semantic skill matching — React vs ReactJS, stakeholder management vs client communication
+JD to resume cosine similarity for smarter fit scoring
+Partial overlap detection — Docker counts toward Kubernetes gap
+
+Tech Stack
+
+Frontend — React (Vite)
+Backend — Spring Boot
+LLM — Ollama locally → Gemini / OpenAI / Anthropic via Spring AI abstraction
+PDF — LaTeX templates + pdflatex in Docker
+Embeddings — later addition
