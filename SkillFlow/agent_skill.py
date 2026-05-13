@@ -2,6 +2,12 @@ import logging
 from dependencies import ConnectLLM
 from pydantic import BaseModel,Field
 from typing import Optional,List
+from fastapi import FastAPI
+from  ollama import chat,ChatResponse
+
+app = FastAPI()
+
+ollamaLLmconn = ConnectLLM()
 
 
 # gives  basic information asking for like name and age 
