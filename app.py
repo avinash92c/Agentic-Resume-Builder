@@ -1,13 +1,15 @@
-from fastapi import FastAPI,HTTPException
+from fastapi import FastAPI,HTTPException,Response
 import logging
-from model import PersonalInfo,Education,Certifications
-from userrepo import save_section,get_resume,get_resume_by_email
+from model import PersonalInfo,Education,Certifications,StartRequest,ResumeRequest
+from userrepo import save_section,get_resume_by_email
 import uuid
 from typing import List
 from pymongo.errors import PyMongoError
+from agent_psg import PSG_GRAPH
+from langgraph.types import Command
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(levelname)s: %(message)s'
 )
 
@@ -98,3 +100,53 @@ def getCertificatedinfo(email:str):
         return resume.certificates
     except PyMongoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to get personal info: {e}") 
+
+
+psg_graph = PSG_GRAPH()
+
+@app.post("/psg/start")
+async def start_psg(request: StartRequest):
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    resume = get_resume_by_email(request.email)
+    psg_graph.invoke(
+        {"user_input_initial": request.user_input,"session_id":resume.sessionId},
+        config=config
+    )
+    
+    # don't use invoke's return value — get state separately after interrupt
+    state = psg_graph.get_state(config)
+    
+    return {
+        "thread_id": thread_id,
+        "stage": state.values["current_stage"],
+        "questions": state.tasks[0].interrupts[0].value["questions"]
+    }
+
+@app.post("/psg/resume")
+async def resume_psg(request: ResumeRequest):
+    config = {"configurable": {"thread_id": request.thread_id}}
+    
+    psg_graph.invoke(
+        Command(resume=request.user_data),  # not user_input, resume with answers
+        config=config
+    )
+    
+    state = psg_graph.get_state(config)
+    logging.info(f"Drafts {state}")
+    
+    # graph may or may not be interrupted again depending on stage
+    is_interrupted = bool(state.tasks)
+    
+    return {
+        "thread_id": request.thread_id,
+        "stage": state.values["current_stage"],
+        # "data": state.values["drafts"][-1],
+        "data": state.tasks[0].interrupts[0].value if is_interrupted else None,
+        "complete": not is_interrupted
+    }
+
+@app.get("/psg/view")
+async def view_graph():
+    png_bytes = psg_graph.get_graph().draw_mermaid_png()
+    return Response(content=png_bytes, media_type="image/png")
