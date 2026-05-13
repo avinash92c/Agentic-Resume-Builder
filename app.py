@@ -6,6 +6,7 @@ import uuid
 from typing import List
 from pymongo.errors import PyMongoError
 from agent_psg import PSG_GRAPH
+from agent_wh import WH_GRAPH
 from langgraph.types import Command
 
 logging.basicConfig(
@@ -147,6 +148,55 @@ async def resume_psg(request: ResumeRequest):
     }
 
 @app.get("/psg/view")
-async def view_graph():
+async def view_psg_graph():
     png_bytes = psg_graph.get_graph().draw_mermaid_png()
     return Response(content=png_bytes, media_type="image/png")
+
+wh_graph = WH_GRAPH()
+
+@app.get("/wh/view")
+async def view_wh_graph():
+    png_bytes = wh_graph.get_graph().draw_mermaid_png()
+    return Response(content=png_bytes, media_type="image/png")
+
+@app.post("/wh/start")
+async def start_psg(request: StartRequest):
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    resume = get_resume_by_email(request.email)
+    wh_graph.invoke(
+        {"user_input_initial": request.user_input,"session_id":resume.sessionId},
+        config=config
+    )
+    
+    # don't use invoke's return value — get state separately after interrupt
+    state = wh_graph.get_state(config)
+    
+    return {
+        "thread_id": thread_id,
+        "stage": state.values["current_stage"],
+        "questions": state.tasks[0].interrupts[0].value["questions"]
+    }
+
+@app.post("/wh/resume")
+async def resume_psg(request: ResumeRequest):
+    config = {"configurable": {"thread_id": request.thread_id}}
+    
+    wh_graph.invoke(
+        Command(resume=request.user_data),  # not user_input, resume with answers
+        config=config
+    )
+    
+    state = wh_graph.get_state(config)
+    logging.info(f"Drafts {state}")
+    
+    # graph may or may not be interrupted again depending on stage
+    is_interrupted = bool(state.tasks)
+    
+    return {
+        "thread_id": request.thread_id,
+        "stage": state.values["current_stage"],
+        # "data": state.values["drafts"][-1],
+        "data": state.tasks[0].interrupts[0].value if is_interrupted else None,
+        "complete": not is_interrupted
+    }
