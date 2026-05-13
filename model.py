@@ -36,5 +36,11 @@ class Resume(BaseModel):
     personalProjects: Optional[str] = Field(default=None, alias="personal_projects")
     sessionId: Optional[str] = Field(default=None, alias="session_id")
 
+class StartRequest(BaseModel):
+    # thread_id: str
+    user_input: str
+    email: str
 
-
+class ResumeRequest(BaseModel):
+    thread_id: str
+    user_data: dict  # whatever the UI is sending back
