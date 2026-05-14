@@ -151,7 +151,7 @@ def ask_followup(state: WorkSkillSet) -> dict:
 def choose_next_step(state: WorkSkillSet) -> Literal["ask_followup", "draft_answer", "approval_gate"]:
     route_map = {
         "clarify": "ask_followup",
-        "approval": "approval_gate",
+        "approval": "accept_results",
         "answer": "draft_answer",
     }
     return route_map.get(state["flowmap"], "draft_answer")
@@ -165,12 +165,12 @@ skillbuilder = StateGraph(WorkSkillSet)
 skillbuilder.add_node("classify_request", classify_request)
 skillbuilder.add_node("ask_followup", ask_followup)
 skillbuilder.add_node("draft_answer", draft_answer)
-skillbuilder.add_node("approval_gate", approval_gate)
+skillbuilder.add_node("accept_results", accept_results)
 
 skillbuilder.add_edge(START, "classify_request")
 skillbuilder.add_conditional_edges("classify_request", choose_next_step)
 skillbuilder.add_edge("ask_followup", END)
 skillbuilder.add_edge("draft_answer", END)
-skillbuilder.add_edge("approval_gate", END)
+skillbuilder.add_edge("accept_results", END)
 
 app = skillbuilder.compile()
