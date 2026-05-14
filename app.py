@@ -7,6 +7,7 @@ from typing import List
 from pymongo.errors import PyMongoError
 from agent_psg import PSG_GRAPH
 from agent_wh import WH_GRAPH
+from agent_pp import PP_GRAPH
 from langgraph.types import Command
 
 logging.basicConfig(
@@ -15,6 +16,10 @@ logging.basicConfig(
 )
 
 app = FastAPI()
+
+psg_graph = PSG_GRAPH()
+wh_graph = WH_GRAPH()
+pp_graph = PP_GRAPH()
 
 @app.get("/health")
 def health():
@@ -102,9 +107,6 @@ def getCertificatedinfo(email:str):
     except PyMongoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to get personal info: {e}") 
 
-
-psg_graph = PSG_GRAPH()
-
 @app.post("/psg/start")
 async def start_psg(request: StartRequest):
     thread_id = str(uuid.uuid4())
@@ -152,8 +154,6 @@ async def view_psg_graph():
     png_bytes = psg_graph.get_graph().draw_mermaid_png()
     return Response(content=png_bytes, media_type="image/png")
 
-wh_graph = WH_GRAPH()
-
 @app.get("/wh/view")
 async def view_wh_graph():
     png_bytes = wh_graph.get_graph().draw_mermaid_png()
@@ -188,6 +188,53 @@ async def resume_psg(request: ResumeRequest):
     )
     
     state = wh_graph.get_state(config)
+    logging.info(f"Drafts {state}")
+    
+    # graph may or may not be interrupted again depending on stage
+    is_interrupted = bool(state.tasks)
+    
+    return {
+        "thread_id": request.thread_id,
+        "stage": state.values["current_stage"],
+        # "data": state.values["drafts"][-1],
+        "data": state.tasks[0].interrupts[0].value if is_interrupted else None,
+        "complete": not is_interrupted
+    }
+
+@app.get("/pp/view")
+async def view_pp_graph():
+    png_bytes = pp_graph.get_graph().draw_mermaid_png()
+    return Response(content=png_bytes, media_type="image/png")
+
+@app.post("/pp/start")
+async def start_psg(request: StartRequest):
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    resume = get_resume_by_email(request.email)
+    pp_graph.invoke(
+        {"user_input_initial": request.user_input,"session_id":resume.sessionId},
+        config=config
+    )
+    
+    # don't use invoke's return value — get state separately after interrupt
+    state = pp_graph.get_state(config)
+    
+    return {
+        "thread_id": thread_id,
+        "stage": state.values["current_stage"],
+        "questions": state.tasks[0].interrupts[0].value["questions"]
+    }
+
+@app.post("/pp/resume")
+async def resume_psg(request: ResumeRequest):
+    config = {"configurable": {"thread_id": request.thread_id}}
+    
+    pp_graph.invoke(
+        Command(resume=request.user_data),  # not user_input, resume with answers
+        config=config
+    )
+    
+    state = pp_graph.get_state(config)
     logging.info(f"Drafts {state}")
     
     # graph may or may not be interrupted again depending on stage

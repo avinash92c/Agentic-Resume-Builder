@@ -1,4 +1,6 @@
 import logging
+import json
+import copy
 from typing import List, TypedDict
 from dependencies import ConnectLLM, load_prompt, get_checkpointer
 from userrepo import save_section
@@ -10,10 +12,24 @@ logger = logging.getLogger(__name__)  # GET LOGGER
 
 llm = ConnectLLM()
 
+class WorkExperience(TypedDict):
+    company_name: str
+    job_title: str
+    start_date: str
+    end_date: str                    # or "Present"
+    employment_type: str             # full time, contract etc
+    # location: str                    # or remote
+    projects: List[str]              # raw project descriptions
+
+class Project(TypedDict):
+    company:str
+    project:str
+    # project_refined:str
+
 class WorkHistoryState(MessagesState):
     session_id: str
-    user_input_initial: dict[str,List[str]] # COMPANY,PROJECT WISE DETAILS
-    pending_projects: List[str]                  # projects not yet questioned
+    user_input_initial: List[WorkExperience] # COMPANY,PROJECT WISE DETAILS
+    pending_projects: List[Project]                  # projects not yet questioned
     current_project_index: int                         # project being processed now
     refinement_counts: int
     generated_questions: List[str] # PROJECT WISE QUESTIONS
@@ -30,11 +46,19 @@ class GeneratedQuestionsResult(TypedDict):
 work_history_graph = StateGraph(WorkHistoryState)
 
 def WH_FlattenProjects(state:WorkHistoryState):
-    flattened = [
-        item
-        for sublist in state["user_input_initial"].values()
-        for item in sublist
-    ]
+    # flattened = [
+    #     item
+    #     for sublist in state["user_input_initial"].values()
+    #     for item in sublist
+    # ]
+
+    flattened = []
+
+    for company in state["user_input_initial"]:
+        company_name = company["company_name"]
+        for project_data in company["projects"]:
+            flattened.append(Project(company=company_name, project=project_data))
+    
     return {
         "pending_projects": flattened,
         "current_project_index": 0,
@@ -57,7 +81,7 @@ def WH_PrepareQuestions(state:WorkHistoryState):
     selected_project = state["pending_projects"][selected_index]
     llm_messages = [
         SystemMessage(system_prompt),
-        HumanMessage(selected_project)
+        HumanMessage(json.dumps(selected_project))
     ]
     result = llm.with_structured_output(GeneratedQuestionsResult).invoke(llm_messages)
     logging.info(f"WH_PrepareQuestions result {result}")
@@ -106,7 +130,7 @@ def WH_PrepareDraft(state:WorkHistoryState):
 
     # state["pending_projects"][selected_index] = result.content
     pending_projects = state["pending_projects"].copy()
-    pending_projects[selected_index] = result.content
+    pending_projects[selected_index]["project"] = result.content
 
     return {
         # "drafts": state.get("drafts", []) + [result.content],
@@ -120,20 +144,59 @@ def WH_HasMoreProjects(state:WorkHistoryState):
         return "next_project"
     else:
         return "review"
+    
+def WH_PrepareOverallDraft(state:WorkHistoryState):
+    system_prompt = load_prompt("prompts\WH\overall_draft.txt")
+
+    pending_projects = state["pending_projects"]
+    overall_input = copy.deepcopy(state["user_input_initial"])
+
+    # REPLACE LIST OF PROJECTS IN USER_INPUT_INITIAL WITH PENDING_PROJECTS LIST
+    # LLM REFINED THE DATA FOR THE PROJECTS SO PUSH THEM INTO OVERALL DATA AND USE THAT TO GENERATE FULL DRAFT
+    
+    # MAKE PENDING PROJECTS INTO A DICT FOR QUICK REFERENCE
+    project_company_drafts : dict[str,List[str]] = {}
+    for record in pending_projects:
+        if record["company"] not in project_company_drafts:
+            project_company_drafts[record["company"]] = []
+        
+        project_company_drafts[record['company']].append(record["project"])
+
+    for company in overall_input:
+        company["projects"] = project_company_drafts[company["company_name"]]
+
+    raw_input_llm = json.dumps(overall_input)
+
+    messages = [
+        HumanMessage(raw_input_llm),
+        SystemMessage(system_prompt)
+    ]
+
+    result = llm.invoke(messages)
+
+    logging.info(f"Initial Overall draft: {result.content}")
+
+    return {
+        "user_input_initial" : overall_input,
+        "drafts":[result.content],
+        "current_stage": "ready_for_review"
+    }
 
 def WH_PresentForReview(state:WorkHistoryState):
     # ASK USER TO REVIEW
     # FLATTEN PROJECTS INTO SINGLE DRAFT
-    projects = "\n\n".join(state["pending_projects"])
+    # projects = "\n\n".join(state["pending_projects"])
 
+    draft = state["drafts"][-1]
+    
     approved = interrupt({
         # this gets returned to your UI
         # "drafts": state["drafts"][-1],
-        "drafts":[projects],
+        "drafts":draft,
         "questions":"Review the Draft and provide approval"
     })
     return {
-        "drafts":[projects],
+        # "drafts":[draft],
         "approved":approved["approved"],
         "current_stage": "awaiting_approval"
     }
@@ -154,9 +217,11 @@ def WH_PrepareRefinementDraft(state:WorkHistoryState):
     # ASK LLM TO PREPARE ANOTHER DRAFT BASED ON REFINEMENTS
     system_prompt = load_prompt("prompts\WH\/refine_draft.txt")
 
+    user_input_initial = json.dumps(state["user_input_initial"])
+
     context = f"""
     Original Background:
-    {state["user_input_initial"]}
+    {user_input_initial}
 
     Current Draft:
     {state["drafts"][-1]}
@@ -196,6 +261,7 @@ def build_wh_graph():
     work_history_graph.add_node("WH_PrepareQuestions",WH_PrepareQuestions)
     work_history_graph.add_node("WH_CollectAnswers",WH_CollectAnswers)
     work_history_graph.add_node("WH_PrepareDraft",WH_PrepareDraft)
+    work_history_graph.add_node("WH_PrepareOverallDraft",WH_PrepareOverallDraft)
     work_history_graph.add_node("WH_PresentForReview",WH_PresentForReview)
     work_history_graph.add_node("WH_AskInputsForRefinement",WH_AskInputsForRefinement)
     work_history_graph.add_node("WH_PrepareRefinementDraft",WH_PrepareRefinementDraft)
@@ -203,7 +269,8 @@ def build_wh_graph():
 
     work_history_graph.add_conditional_edges("WH_PrepareDraft",WH_HasMoreProjects,{
         "next_project":"WH_SelectProject",
-        "review":"WH_PresentForReview"
+        "review":"WH_PrepareOverallDraft"
+        # "review":"WH_PresentForReview"
     })
     
     work_history_graph.add_conditional_edges("WH_PresentForReview",WH_NeedRefinement,{
@@ -219,6 +286,7 @@ def build_wh_graph():
     work_history_graph.add_edge("WH_CollectAnswers","WH_PrepareDraft")
     # work_history_graph.add_edge("WH_PrepareDraft","WH_PresentForReview")
 
+    work_history_graph.add_edge("WH_PrepareOverallDraft","WH_PresentForReview")
     work_history_graph.add_edge("WH_AskInputsForRefinement","WH_PrepareRefinementDraft")
     work_history_graph.add_edge("WH_PrepareRefinementDraft","WH_PresentForReview")
     
