@@ -1,14 +1,14 @@
 import logging
 from dependencies import ConnectLLM
 from pydantic import BaseModel,Field
-from typing import Optional,List
+from typing import Optional,List,TypedDict
 from fastapi import FastAPI
-from  ollama import chat,ChatResponse
+from langchain.messages import SystemMessage, HumanMessage
+from langgraph.graph import END, START, StateGraph
 
-app = FastAPI()
-
-ollamaLLmconn = ConnectLLM()
-
+#Dependencies objects
+logger = logging.getLogger(__name__)
+llm = ConnectLLM()
 
 # gives  basic information asking for like name and age 
 def  user_info():
@@ -17,13 +17,14 @@ def  user_info():
     except Exception as ex:
         print (f"ex message here ")
 
-#any filed of  expertise has to have  some experience regarless of  working with the enterprises or no
+#any filed of  expertise has to have  some experience regarless of  working with the enterprises or none
 def user_total_experience_years(usrinput: str):    
     try:
         return None
     except Exception as ex:
         print (f"ex message here ")
 
+# give user location preference by the user
 def user_location_preference(location: str):
     try:
         return None
@@ -86,21 +87,27 @@ def user_rating():
     except Exception as ex:
         print (f"ex message here ")
 
-
-class WorkExperience(BaseModel):
-    company: str = Field(description="what is your current Comapny")
+class WorkSkillSet(TypedDict):
+    name: str
+    category: str  
+    user_rating: int
+    is_core: bool 
+    company: str 
     role: str
     start_date: str
-    end_date: Optional[str] = "Present"
+    end_date: Optional[str] 
     user_total_experience_years: str
     location: Optional[str]
     achievements: List[str] 
     technologies_used: List[str]
-    user_relevance_to_market: bool
+    user_relevance_to_market: bool  
+    reponseinfo :str
 
-
-class SkillSet(BaseModel):
-    name: str
-    category: str  
-    user_rating: int = 0 
-    is_core: bool = False 
+# this is for LLM to work on
+def ask_followup(state: WorkSkillSet) -> dict:
+    return {
+        "response_text": (
+            "I want to make sure I help you accurately. "
+            "Could you give me one more detail about what you need?"
+        )
+    }
