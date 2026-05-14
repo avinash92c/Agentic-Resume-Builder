@@ -14,7 +14,7 @@ The user provides a high-level description of:
 ---
 
 TASK:
-Generate exactly 5 highly targeted follow-up questions that will uncover missing information needed to create a strong professional summary later.
+Generate exactly 5 highly targeted follow-up questions that will filter
 
 ---
 
