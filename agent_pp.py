@@ -38,7 +38,7 @@ def PP_SelectProject(state:PersonalProjectsState):
     return{
         "current_project_index":current_index,
         # "refined_projects": refined_projects,
-        "current_state": "select_project"
+        "current_stage": "select_project"
     }
 
 def PP_PrepareQuestions(state:PersonalProjectsState):
@@ -49,15 +49,15 @@ def PP_PrepareQuestions(state:PersonalProjectsState):
     current_project = user_input_projects[current_project_index]
 
     messages = [
-        HumanMessage(current_project),
-        SystemMessage(system_prompt)
+        SystemMessage(system_prompt),
+        HumanMessage(current_project)
     ]
 
     result = llm.with_structured_output(GeneratedQuestionsResult).invoke(messages)
     logging.info(f"PP_PrepareQuestions result {result}")
     return {
         "generated_questions":result["questions"],
-        "current_state":"awaiting_answers"
+        "current_stage":"awaiting_answers"
     }
 
 def PP_CollectAnswers(state:PersonalProjectsState):
@@ -68,14 +68,14 @@ def PP_CollectAnswers(state:PersonalProjectsState):
     })
     return {
         "user_answers":answers,
-        "current_state":"ready_for_project_draft"
+        "current_stage":"ready_for_project_draft"
     }
 
 def PP_PrepareProjectDraft(state:PersonalProjectsState):
     system_prompt = load_prompt("prompts/PP/initial_project_draft.txt")
     current_project_index = state["current_project_index"]
     user_input_projects = state["user_input_projects"]
-    refined_projects = state.get("refined_projects",[]).copy()
+    refined_projects = state.get("refined_projects",[])
     selected_project = user_input_projects[current_project_index]
 
     qa_pairs = "\n".join(
@@ -96,19 +96,19 @@ def PP_PrepareProjectDraft(state:PersonalProjectsState):
     ]
 
     result = llm.invoke(messages)
-    refined_projects.append(result.content)
+    refined_projects = refined_projects + [result.content]
 
     return {
         "current_project_index": current_project_index+1,
         "refined_projects":refined_projects,        
-        "current_state":"select_next_project"
+        "current_stage":"select_next_project"
     }
 
 def PP_HasMoreProjects(state:PersonalProjectsState):
     input_projects = state["user_input_projects"]
     current_project_index = state["current_project_index"]
 
-    if current_project_index<len(input_projects)-1:
+    if current_project_index<len(input_projects):
         return "next_project"
     else:
         return "review"    
@@ -117,7 +117,7 @@ def PP_PrepareOverallDraft(state:PersonalProjectsState):
     system_prompt = load_prompt("prompts/PP/overall_draft.txt")
     refined_projects = state["refined_projects"]
     refined_prompts_text = json.dumps(refined_projects)
-    drafts = state.get("drafts",[])
+    drafts = state.get("drafts",[]).copy()
 
     messages = [
         SystemMessage(system_prompt),
@@ -129,7 +129,7 @@ def PP_PrepareOverallDraft(state:PersonalProjectsState):
 
     return {
         "drafts":drafts,
-        "current_state":"ready_for_review"
+        "current_stage":"ready_for_review"
     }
 
 def PP_ReviewOverallDraft(state:PersonalProjectsState):
@@ -141,12 +141,15 @@ def PP_ReviewOverallDraft(state:PersonalProjectsState):
 
     return {
         "approved":approved["approved"],
-        "current_state":"check_refinement"
+        "current_stage":"check_refinement"
     }
 
 def PP_NeedRefinement(state:PersonalProjectsState):
+    refinements_len = state.get("refinement_counts", 0)
     approved = state.get("approved",False)
     if approved:
+        return "store"
+    elif refinements_len>2:
         return "store"
     else:
         return "refine"
@@ -178,7 +181,7 @@ def PP_PrepareRefinementDraft(state:PersonalProjectsState):
 
     Draft: {draft}
 
-    Refinement: {refinement}
+    Latest Refinement: {refinement}
     """
 
     messages = [
