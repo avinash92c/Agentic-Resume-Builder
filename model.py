@@ -35,6 +35,7 @@ class Resume(BaseModel):
     workHistory: Optional[str] = Field(default=None, alias="work_history")
     personalProjects: Optional[str] = Field(default=None, alias="personal_projects")
     sessionId: Optional[str] = Field(default=None, alias="session_id")
+    finalResume: str = Field(default=None, alias="final_resume")
 
 class StartRequest(BaseModel):
     # thread_id: str

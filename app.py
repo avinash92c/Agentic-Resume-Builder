@@ -8,6 +8,7 @@ from pymongo.errors import PyMongoError
 from agent_psg import PSG_GRAPH
 from agent_wh import WH_GRAPH
 from agent_pp import PP_GRAPH
+from agent_final import FINAL_GRAPH
 from langgraph.types import Command
 
 logging.basicConfig(
@@ -20,6 +21,7 @@ app = FastAPI()
 psg_graph = PSG_GRAPH()
 wh_graph = WH_GRAPH()
 pp_graph = PP_GRAPH()
+fd_graph = FINAL_GRAPH()
 
 @app.get("/health")
 def health():
@@ -160,7 +162,7 @@ async def view_wh_graph():
     return Response(content=png_bytes, media_type="image/png")
 
 @app.post("/wh/start")
-async def start_psg(request: StartRequest):
+async def start_wh(request: StartRequest):
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
     resume = get_resume_by_email(request.email)
@@ -179,7 +181,7 @@ async def start_psg(request: StartRequest):
     }
 
 @app.post("/wh/resume")
-async def resume_psg(request: ResumeRequest):
+async def resume_wh(request: ResumeRequest):
     config = {"configurable": {"thread_id": request.thread_id}}
     
     wh_graph.invoke(
@@ -207,7 +209,7 @@ async def view_pp_graph():
     return Response(content=png_bytes, media_type="image/png")
 
 @app.post("/pp/start")
-async def start_psg(request: StartRequest):
+async def start_pp(request: StartRequest):
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
     resume = get_resume_by_email(request.email)
@@ -226,7 +228,7 @@ async def start_psg(request: StartRequest):
     }
 
 @app.post("/pp/resume")
-async def resume_psg(request: ResumeRequest):
+async def resume_pp(request: ResumeRequest):
     config = {"configurable": {"thread_id": request.thread_id}}
     
     pp_graph.invoke(
@@ -235,6 +237,54 @@ async def resume_psg(request: ResumeRequest):
     )
     
     state = pp_graph.get_state(config)
+    logging.info(f"Drafts {state}")
+    
+    # graph may or may not be interrupted again depending on stage
+    is_interrupted = bool(state.tasks)
+    
+    return {
+        "thread_id": request.thread_id,
+        "stage": state.values["current_stage"],
+        # "data": state.values["drafts"][-1],
+        "data": state.tasks[0].interrupts[0].value if is_interrupted else None,
+        "complete": not is_interrupted
+    }
+
+@app.get("/fd/view")
+async def view_fd_graph():
+    png_bytes = fd_graph.get_graph().draw_mermaid_png()
+    return Response(content=png_bytes, media_type="image/png")
+
+@app.post("/fd/start")
+async def start_fd(request: StartRequest):
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    resume = get_resume_by_email(request.email)
+    fd_graph.invoke(
+        {"session_id":resume.sessionId},
+        config=config
+    )
+    
+    # don't use invoke's return value — get state separately after interrupt
+    state = fd_graph.get_state(config)
+    
+    return {
+        "thread_id": thread_id,
+        "stage": state.values["current_stage"],
+        "question": state.tasks[0].interrupts[0].value["Question"],
+        "draft": state.tasks[0].interrupts[0].value["draft"]
+    }
+
+@app.post("/fd/resume")
+async def resume_fd(request: ResumeRequest):
+    config = {"configurable": {"thread_id": request.thread_id}}
+    
+    fd_graph.invoke(
+        Command(resume=request.user_data),  # not user_input, resume with answers
+        config=config
+    )
+    
+    state = fd_graph.get_state(config)
     logging.info(f"Drafts {state}")
     
     # graph may or may not be interrupted again depending on stage
