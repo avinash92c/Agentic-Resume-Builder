@@ -13,6 +13,13 @@ llm = ConnectLLM()
 
 class GeneratedQuestionsResult(TypedDict):
     questions: List[str]
+    resume_text: str
+    skill_queue: List[str]          # Skills left to test
+    current_skill: str              # Skill currently being evaluated
+    current_question: str           # The generated question
+    user_answer: str                # User's input response
+    evaluations: Dict[str, Any]     # Stores results for each skill
+    years_of_experience: int
 
 # gives  basic information asking for like name and age 
 def  user_info():
@@ -107,6 +114,16 @@ class WorkSkillSet(TypedDict):
     user_relevance_to_market: bool  
     reponseinfo :str
     flowmap: str
+    
+def extract_skills_node(state: GeneratedQuestionsResult) -> GeneratedQuestionsResult:
+    print("Extracting Skills")
+    text = state["resume_text"]
+
+    # use an LLM with structured output to parse the text.
+    extracted_skills = ["Python", "C#", "Design"]
+    state["skill_queue"] = extracted_skills
+    state["evaluations"] = {}
+    return state
 
 def classify_request(state: WorkSkillSet) -> dict:
     text = state["user_info_data"].lower()
@@ -116,10 +133,32 @@ def classify_request(state: WorkSkillSet) -> dict:
         return {"flowmap": "clarify"}
     return {"flowmap": "answer"}
 
+def generate_question_node(state: GeneratedQuestionsResult) -> GeneratedQuestionsResult:
+    queue = state["skill_queue"].copy()
+    current_skill = queue.pop(0)
+    yoe = state.get("years_of_experience", 5)
+    
+    if current_skill == "Python":
+        question = "Explain how you would troubleshoot a memory leak caused by dangling references or global variables in a long-running Python application."
+    elif current_skill == "C#":
+        question = "Design an efficient LRU Cache eviction strategy. What data structures would you combine to achieve O(1) lookups and updates?"
+    else:
+        question = f"Describe a complex architectural trade-off you had to make recently when designing a system leveraging {current_skill}."
+        
+    state["skill_queue"] = queue 
+    state["current_skill"] = current_skill
+    state["current_question"] = question
+    print(f"[Question]: {question}")
+    state["user_answer"] = input(">> ")
+    
+    return state
 
 def draft_answer(state: WorkSkillSet) -> dict:
         system_prompt = load_prompt("prompts\SkillFlow\machinequeries.txt")
         prompt = (
+        "score": 4.5,
+        "feedback": "Demonstrated solid technical grasp of the core concepts, though could expand on micro-optimization metrics.",
+        "missing_keywords": ["tracemalloc", "weakref"] if state["current_skill"] == "Python" else []
         "You are a helpful resume builder is a support assistant to write perfect resumes .\n"
         "ananlyse the  uploaded resumes agianst the list of skills provided .\n"
         "Answer the following question clearly and in maximum of 2 line.\n\n"
@@ -136,7 +175,9 @@ def draft_answer(state: WorkSkillSet) -> dict:
         # model="llama-3.1-8b-instant",
         # messages=[{"role": "user", "content": prompt}], )
         # result
-        return {"response_text": result}    
+        state["evaluations"][state["current_skill"]] = prompt
+          
+        return state
 
 
 # this is for human  to answer on
@@ -162,15 +203,33 @@ def store_db_gate(state:WorkSkillSet):
     return {"current_stage":"Completed"}
 
 skillbuilder = StateGraph(WorkSkillSet)
+skillbuilder.add_node("extract_skills", extract_skills_node)
+skillbuilder.add_node("generate_question", generate_question_node)
+skillbuilder.add_node("evaluate_answer", evaluate_answer_node)
 skillbuilder.add_node("classify_request", classify_request)
 skillbuilder.add_node("ask_followup", ask_followup)
 skillbuilder.add_node("draft_answer", draft_answer)
 skillbuilder.add_node("accept_results", accept_results)
 
 skillbuilder.add_edge(START, "classify_request")
-skillbuilder.add_conditional_edges("classify_request", choose_next_step)
+skillbuilder.add_conditional_edges("classify_request", "choose_next_step")
+skillbuilder.add_conditional_edges("choose_next_step", "extract_skills")
+skillbuilder.add_conditional_edges("extract_skills", "generate_question")
+skillbuilder.add_conditional_edges("generate_question", "evaluate_answer")
+
+builder.add_conditional_edges(
+    "evaluate_answer",
+    route_based_on_queue,
+    {
+        "generate_question": "generate_question",
+        "end_graph": END
+    }
+)
 skillbuilder.add_edge("ask_followup", END)
 skillbuilder.add_edge("draft_answer", END)
 skillbuilder.add_edge("accept_results", END)
 
 app = skillbuilder.compile()
+
+print("Starting Agentic Skill Checker Graph")
+final_output = graph.invoke({}])
