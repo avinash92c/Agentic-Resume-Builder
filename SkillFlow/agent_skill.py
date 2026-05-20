@@ -125,7 +125,7 @@ def Skills_StoreDB(state:SkillState):
 
     # .model_dump() converts your Pydantic object into a clean dict
     save_section(state['session_id'], "skills", structured_data.model_dump())
-        
+
     return {"current_stage":"Completed"}
 
 def build_skills_graph():
@@ -149,8 +149,3 @@ def build_skills_graph():
 
 # Build and compile ONCE at import time
 skills_app = build_skills_graph().compile(checkpointer=get_checkpointer())
-
-# # Build and compile ONCE at import time
-# build_skills_graph()
-# skills_app = skills_graph.compile(checkpointer=get_checkpointer())
-#   
