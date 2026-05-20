@@ -13,6 +13,7 @@ from agent_final import FINAL_GRAPH
 from langgraph.types import Command
 from model import AgentResponse, AgentResponseData
 from responsebuilder import map_interrupt_data
+from SkillFlow.agent_skill import skills_app 
 
 logging.basicConfig(
     level=logging.INFO,
@@ -364,5 +365,71 @@ async def resume_fd(request: ResumeRequest):
         "stage": state.values["current_stage"],
         # "data": state.values["drafts"][-1],
         "data": state.tasks[0].interrupts[0].value if is_interrupted else None,
+        "complete": not is_interrupted
+    }
+
+@app.get("/skills/view")
+async def view_skills_graph():
+    png_bytes = skills_app.get_graph().draw_mermaid_png()
+    return Response(content=png_bytes, media_type="image/png")
+
+from pydantic import BaseModel
+
+class RefineRequest(BaseModel):
+    thread_id: str
+    refinement: str
+    approved: bool = False
+
+@app.post("/skills/start")
+async def start_skills(request: StartRequest):
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    
+    resume = get_resume_by_email(request.email)
+    if resume is None:
+        raise HTTPException(status_code=404, detail=f"No resume found for email: {request.email}")
+    
+    skills_app.invoke(
+        {
+            "raw_skills_input": request.user_input,
+            "session_id": resume.sessionId,
+            "drafts": [],
+            "refinements": [],
+            "approved": False,
+            "refinement_counts": 0,
+            "current_stage": "starting"
+        },
+        config=config
+    )
+    
+    state = skills_app.get_state(config)
+    is_interrupted = bool(state.tasks)
+
+    return {
+        "thread_id": thread_id,
+        "stage": state.values["current_stage"],
+        "current_draft": state.values["drafts"][-1] if state.values.get("drafts") else None,
+        "refinement_question": state.tasks[0].interrupts[0].value["message"] if is_interrupted else None,
+        "complete": not is_interrupted
+    }
+
+
+@app.post("/skills/resume")
+async def resume_skills(request: RefineRequest):
+    config = {"configurable": {"thread_id": request.thread_id}}
+    
+    skills_app.invoke(
+        Command(resume={"refinement": request.refinement, "approved": request.approved}),
+        config=config
+    )
+    
+    state = skills_app.get_state(config)
+    is_interrupted = bool(state.tasks)
+
+    return {
+        "thread_id": request.thread_id,
+        "stage": state.values["current_stage"],
+        "current_draft": state.values["drafts"][-1] if state.values.get("drafts") else None,
+        "refinement_question": state.tasks[0].interrupts[0].value["message"] if is_interrupted else None,
         "complete": not is_interrupted
     }
