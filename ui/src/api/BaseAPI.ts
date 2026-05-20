@@ -1,0 +1,1 @@
+export let BASEURL:string = "http://localhost:8000";

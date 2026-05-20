@@ -35,6 +35,7 @@ class Resume(BaseModel):
     workHistory: Optional[str] = Field(default=None, alias="work_history")
     personalProjects: Optional[str] = Field(default=None, alias="personal_projects")
     sessionId: Optional[str] = Field(default=None, alias="session_id")
+    finalResume: str = Field(default=None, alias="final_resume")
 
 class StartRequest(BaseModel):
     # thread_id: str
@@ -44,3 +45,23 @@ class StartRequest(BaseModel):
 class ResumeRequest(BaseModel):
     thread_id: str
     user_data: dict  # whatever the UI is sending back
+
+class EducationInfoRequest(BaseModel):
+    education: List[Education]
+    email: str
+
+class CertificationsRequest(BaseModel):
+    certifications: List[Certifications]
+    email: str
+
+class AgentResponseData(BaseModel):
+    message: Optional[str] = None
+    questions: List[str] = []
+    draft: Optional[str] = None
+    refinement_question: Optional[str] = None
+
+class AgentResponse(BaseModel):
+    thread_id: str
+    stage: str
+    complete: bool = False
+    data: AgentResponseData
