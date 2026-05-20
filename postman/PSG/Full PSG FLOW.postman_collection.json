@@ -1,0 +1,153 @@
+{
+	"info": {
+		"_postman_id": "7615b215-ad59-4c25-9a83-23db2455d2cd",
+		"name": "Full PSG FLOW",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "PSG START",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"email\":\"john.doe@example.com\",\r\n    \"user_input\": \"I am a motivated software developer with experience in building applications and working on backend systems. I have worked with APIs, databases, and basic system design concepts. I can write code, debug issues, and help in developing features from start to finish. I am familiar with version control, working in teams, and following project requirements. I am continuously learning new technologies and trying to improve my skills to build better and more reliable software.\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/psg/start",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"psg",
+						"start"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "PSG ASK QUESTIONS",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"thread_id\": \"ff83f1cc-2b47-4788-8410-b123ad63faf6\",\r\n    \"user_data\": {\r\n        \"Can you quantify the impact of your work, such as performance improvements, cost savings, or user adoption metrics achieved through your projects?\": \"Reduced API response time by 40% through query optimization and caching. One of my services handles about 500k requests per day. Also cut cloud infrastructure costs by around 20% by moving to a more efficient architecture.\",\r\n        \"Which specific technologies or frameworks have you used for backend systems, and have you designed or implemented any custom architectures or APIs?\": \"Primarily Python with FastAPI and Django. I have designed REST APIs from scratch and worked with PostgreSQL, MongoDB, and Redis. Also have experience with Kafka for event-driven systems and Docker and Kubernetes for deployment.\",\r\n        \"Did you lead or own any end-to-end features, from design to deployment, or were you primarily a contributor within a team?\": \"Yes, I have owned several features end to end. Most recently led the design and delivery of a notification service that was adopted across 3 internal teams. I handled everything from requirements gathering to production deployment and monitoring.\",\r\n        \"What were the most challenging aspects or constraints you faced while building complex backend systems or integrating third-party services?\": \"Biggest challenge was dealing with distributed system consistency issues, especially around payment integrations where we could not afford data loss. Also had to handle third party API rate limits gracefully under high load.\",\r\n        \"Have you taken on any roles or responsibilities that increased your scope, such as mentoring, architecture decisions, or leading projects?\": \"Yes, I have been informally mentoring two junior developers for the past year. I also started participating in architecture review meetings and have had a few of my proposals adopted by the team.\"\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/psg/resume",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"psg",
+						"resume"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "PSG APPROVE",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"thread_id\": \"ff83f1cc-2b47-4788-8410-b123ad63faf6\",\r\n    \"user_data\": { \"approved\": false }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/psg/resume",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"psg",
+						"resume"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "PSG_REFINE",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"thread_id\": \"ff83f1cc-2b47-4788-8410-b123ad63faf6\",\r\n    \"user_data\": { \"refinement\": \"Fake the abilities and hype them up. add abilities i dont have also if possible\"}\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/psg/resume",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"psg",
+						"resume"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "BASICINFO_INIT",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"name\": \"John Doe\",\r\n  \"email\": \"john.doe@example.com\",\r\n  \"linkedin\": \"https://www.linkedin.com/in/johndoe\",\r\n  \"github\": \"https://github.com/johndoe\",\r\n  \"phone\": \"+91-9876543210\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8000/personal-info",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"personal-info"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
