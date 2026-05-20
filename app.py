@@ -1,10 +1,11 @@
 from fastapi import FastAPI,HTTPException,Response
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import logging
 from model import CertificationsRequest, EducationInfoRequest, PersonalInfo,Education,Certifications,StartRequest,ResumeRequest
 from userrepo import save_section,get_resume_by_email
 import uuid
-from typing import List
+from typing import List,Dict, Any
 from pymongo.errors import PyMongoError
 from agent_psg import PSG_GRAPH
 from agent_wh import WH_GRAPH
@@ -14,11 +15,13 @@ from langgraph.types import Command
 from model import AgentResponse, AgentResponseData
 from responsebuilder import map_interrupt_data
 from SkillFlow.agent_skill import skills_app 
+from fastapi import FastAPI, HTTPException
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(levelname)s: %(message)s'
 )
+
 
 app = FastAPI()
 app.add_middleware(
@@ -28,6 +31,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+appTwo = FastAPI(title="Agentic Resume Builder Interviewer")
+
+class StartInterviewRequest(BaseModel):
+    session_id: str
+    raw_skills_input: str
+
+class UserReplyRequest(BaseModel):
+    session_id: str
+    user_answer: str
 
 psg_graph = PSG_GRAPH()
 wh_graph = WH_GRAPH()
@@ -432,4 +445,58 @@ async def resume_skills(request: RefineRequest):
         "current_draft": state.values["drafts"][-1] if state.values.get("drafts") else None,
         "refinement_question": state.tasks[0].interrupts[0].value["message"] if is_interrupted else None,
         "complete": not is_interrupted
+    }
+
+@app.post("/interview/start")
+async def start_interview(payload: StartInterviewRequest):
+    """Initializes the graph runtime state and generates the 5 core questions."""
+    config = {"configurable": {"thread_id": payload.session_id}}
+    
+    initial_state = {
+        "raw_skills_input": payload.raw_skills_input,
+        "generated_questions": [
+            "What was the percentage increase in request processing speed after implementing your FastAPI solution?",
+            "Which specific tools or frameworks beyond FastAPI and LangGraph did you use?",
+            "Did you personally design and deploy the LangGraph workflow?"
+        ], # Pre-populated via your LLM generation node step
+        "user_answers": {},
+        "current_question_index": 0,
+        "current_stage": "starting"
+    }
+    
+    # Run the graph until it encounters the first single-question interrupt
+    events = skills_app.stream(initial_state, config, stream_mode="values")
+    
+    for event in events:
+        if "Skills_ChatInterviewer" in event:
+            state_snapshot = skills_app.get_state(config)
+            if state_snapshot.next: # Verifies graph is currently paused at interrupt
+                return {"status": "paused", "turn_data": state_snapshot.next[0].value}
+                
+    return {"status": "completed", "final_state": events[-1]}
+
+@app.post("/interview/reply")
+async def register_reply(payload: UserReplyRequest):
+    """Resumes the graph thread execution state by injecting the specific turn input."""
+    config = {"configurable": {"thread_id": payload.session_id}}
+    
+    # 🚀 Inject user feedback answer directly to kick off the interrupt block
+    events = skills_app.stream(
+        Command(resume={"answer": payload.user_answer}), 
+        config, 
+        stream_mode="values"
+    )
+    
+    state_snapshot = skills_app.get_state(config)
+    
+    # If the state graph hit another interrupt checkpoint, yield the next item in the queue
+    if state_snapshot.next:
+        return {
+            "status": "paused", 
+            "turn_data": state_snapshot.next[0].value
+        }
+        
+    return {
+        "status": "interview_session_complete", 
+        "message": "All answers securely saved to Data Lake."
     }
