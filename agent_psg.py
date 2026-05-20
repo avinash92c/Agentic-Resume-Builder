@@ -89,8 +89,8 @@ def PSG_PrepareForIntialDraft(state: ProfessionalSummaryState):
 def PSG_PresentForReview(state: ProfessionalSummaryState):
     approved = interrupt({
         # this gets returned to your UI
-        "drafts": state["drafts"],
-        "questions":"Review the Draft and provide approval"
+        "drafts": state["drafts"][-1],
+        "approval_question":"Review the Draft and provide approval"
     })
     return {"approved":approved["approved"]}
 

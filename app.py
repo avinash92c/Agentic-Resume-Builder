@@ -1,6 +1,7 @@
 from fastapi import FastAPI,HTTPException,Response
+from fastapi.middleware.cors import CORSMiddleware
 import logging
-from model import PersonalInfo,Education,Certifications,StartRequest,ResumeRequest
+from model import CertificationsRequest, EducationInfoRequest, PersonalInfo,Education,Certifications,StartRequest,ResumeRequest
 from userrepo import save_section,get_resume_by_email
 import uuid
 from typing import List
@@ -10,6 +11,8 @@ from agent_wh import WH_GRAPH
 from agent_pp import PP_GRAPH
 from agent_final import FINAL_GRAPH
 from langgraph.types import Command
+from model import AgentResponse, AgentResponseData
+from responsebuilder import map_interrupt_data
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,6 +20,13 @@ logging.basicConfig(
 )
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Vite default port
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 psg_graph = PSG_GRAPH()
 wh_graph = WH_GRAPH()
@@ -63,18 +73,18 @@ def savepersonalinfo(data:PersonalInfo):
 @app.get("/personal-info")
 def getPersonalInfo(email: str):
     try:
-        resume =get_resume_by_email(email)
+        resume =get_resume_by_email (email)
         return resume.personalInfo
     except PyMongoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to get personal info: {e}") 
     
 
 @app.post("/education-info")
-def saveeducationinfo(educate: List[Education],email : str):
+def saveeducationinfo(education:EducationInfoRequest):
     try:
-        resume =get_resume_by_email(email)
-        session_id =resume.sessionId
-        save_section(session_id,"education",[item.model_dump() for item in educate])
+        resume = get_resume_by_email(education.email)
+        session_id = resume.sessionId
+        save_section(session_id,"education",[item.model_dump() for item in education.education])
         return session_id
     except PyMongoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to save personal info: {e}") 
@@ -83,18 +93,18 @@ def saveeducationinfo(educate: List[Education],email : str):
 @app.get("/education-info")
 def geteducationinfo(email : str):
     try:
-        resume =get_resume_by_email(email)
+        resume = get_resume_by_email(email)
         return resume.education
     except PyMongoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to get personal info: {e}") 
     
 
 @app.post("/certification-info")
-def savecertificationinfo(certificate :List[Certifications],email: str):
+def savecertificationinfo(request:CertificationsRequest):
     try:
-        resume =get_resume_by_email(email)
-        session_id =resume.sessionId
-        save_section(session_id,"certificates",[ item.model_dump() for item in certificate])
+        resume = get_resume_by_email(request.email)
+        session_id = resume.sessionId
+        save_section(session_id,"certificates",[ item.model_dump() for item in request.certifications])
         return session_id
     except PyMongoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to save personal info: {e}") 
@@ -103,7 +113,7 @@ def savecertificationinfo(certificate :List[Certifications],email: str):
 def getCertificatedinfo(email:str):
     try:
         print(email)
-        resume =get_resume_by_email(email)
+        resume = get_resume_by_email(email)
         print(resume)
         return resume.certificates
     except PyMongoError as e:
@@ -121,35 +131,94 @@ async def start_psg(request: StartRequest):
     
     # don't use invoke's return value — get state separately after interrupt
     state = psg_graph.get_state(config)
-    
-    return {
-        "thread_id": thread_id,
-        "stage": state.values["current_stage"],
-        "questions": state.tasks[0].interrupts[0].value["questions"]
-    }
-
-@app.post("/psg/resume")
-async def resume_psg(request: ResumeRequest):
-    config = {"configurable": {"thread_id": request.thread_id}}
-    
-    psg_graph.invoke(
-        Command(resume=request.user_data),  # not user_input, resume with answers
-        config=config
+    interrupt_data = (
+        state.tasks[0].interrupts[0].value
     )
     
-    state = psg_graph.get_state(config)
-    logging.info(f"Drafts {state}")
-    
-    # graph may or may not be interrupted again depending on stage
-    is_interrupted = bool(state.tasks)
-    
-    return {
-        "thread_id": request.thread_id,
-        "stage": state.values["current_stage"],
-        # "data": state.values["drafts"][-1],
-        "data": state.tasks[0].interrupts[0].value if is_interrupted else None,
-        "complete": not is_interrupted
+    # return {
+    #     "thread_id": thread_id,
+    #     "stage": state.values["current_stage"],
+    #     "questions": state.tasks[0].interrupts[0].value["questions"]
+    # }
+
+    return AgentResponse(
+        thread_id=thread_id,
+        stage=state.values["current_stage"],
+        complete=False,
+        data=map_interrupt_data(interrupt_data)
+    )
+
+@app.post("/psg/resume", response_model=AgentResponse)
+async def resume_psg(request: ResumeRequest):
+
+    config = {
+        "configurable": {
+            "thread_id": request.thread_id
+        }
     }
+
+    psg_graph.invoke(
+        Command(resume=request.user_data),
+        config=config
+    )
+
+    state = psg_graph.get_state(config)
+
+    logging.info(f"Drafts {state}")
+
+    is_interrupted = bool(state.tasks)
+
+    if is_interrupted:
+
+        interrupt_data = (
+            state.tasks[0].interrupts[0].value
+        )
+
+        logging.info(f"Interrupt Data {interrupt_data}")
+
+        return AgentResponse(
+            thread_id=request.thread_id,
+            stage=state.values["current_stage"],
+            complete=False,
+            data=map_interrupt_data(interrupt_data)
+        )
+
+    drafts = state.values.get("drafts", [])
+
+    latest_draft = drafts[-1] if drafts else None
+
+    return AgentResponse(
+        thread_id=request.thread_id,
+        stage=state.values["current_stage"],
+        complete=True,
+        data=AgentResponseData(
+            message="Professional summary completed successfully.",
+            draft=latest_draft
+        )
+    )
+
+# @app.post("/psg/resume")
+# async def resume_psg(request: ResumeRequest):
+#     config = {"configurable": {"thread_id": request.thread_id}}
+    
+#     psg_graph.invoke(
+#         Command(resume=request.user_data),  # not user_input, resume with answers
+#         config=config
+#     )
+    
+#     state = psg_graph.get_state(config)
+#     logging.info(f"Drafts {state}")
+    
+#     # graph may or may not be interrupted again depending on stage
+#     is_interrupted = bool(state.tasks)
+    
+#     return {
+#         "thread_id": request.thread_id,
+#         "stage": state.values["current_stage"],
+#         # "data": state.values["drafts"][-1],
+#         "data": state.tasks[0].interrupts[0].value if is_interrupted else None,
+#         "complete": not is_interrupted
+#     }
 
 @app.get("/psg/view")
 async def view_psg_graph():
