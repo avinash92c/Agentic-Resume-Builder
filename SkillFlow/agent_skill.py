@@ -16,6 +16,8 @@ llm = ConnectLLM()
 class SkillState(MessagesState):
     raw_skills_input: str
     drafts: List[str]
+    refinement_questions: List[str]  # <-- Holds the 5 generated questions
+    user_answers: dict[str, str]       # <-- Holds the user's answers
     refinements: List[str]
     approved: bool
     current_stage: str
@@ -26,7 +28,7 @@ class SkillsPayload(BaseModel):
     skills_raw: str
     is_approved: bool
 
-# skills_graph = StateGraph(SkillState)
+skills_graph = StateGraph(SkillState)
 
 def Skills_CallLLM(state: SkillState):
     system_prompt = load_prompt(r"prompts\SkillFlow\machinequeries.txt")  # ← add this back
@@ -86,23 +88,46 @@ def Skills_NeedRefinement(state:SkillState):
         return "approved"
     
 def Skills_AskRefinements(state : SkillState):
-    system_prompt = load_prompt(r"prompts\PSG\refine_draft.txt")
+    # system_prompt = load_prompt(r"prompts\SkillFlow\refine_skills_queries.txt")
+    # context = f"""
+    # Original Background:
+    # {state["raw_skills_input"]}
+    # Current Draft:
+    # {state["drafts"][-1]}
+    # User Refinement Request:
+    # {state["refinements"][-1]}
+    # """
 
-    context = f"""
-    Original Background:
-    {state["raw_skills_input"]}
+    # Load the highly optimized agentic refinement prompt template
+    system_prompt_template = load_prompt(r"prompts\SkillFlow\refine_skills_queries.txt")
 
-    Current Draft:
-    {state["drafts"][-1]}
+    # Extract historical tracking strings safely
+    current_draft = state["drafts"][-1] if state.get("drafts") else "No drafts compiled yet."
+    latest_user_request = state["refinements"][-1] if state.get("refinements") else "No refinement specified."
+    current_count = state.get("refinement_counts", 0) + 1  # Predict the upcoming attempt count
 
-    User Refinement Request:
-    {state["refinements"][-1]}
-    """
+    # Inject variables dynamically into the template text
+    system_prompt = system_prompt_template.format(
+        raw_skills_input=state.get("raw_skills_input", ""),
+        current_draft=current_draft,
+        user_refinement_request=latest_user_request,
+        refinement_count=current_count
+    )
+
+    # Compile clear engineering context for the message stream
+    context = (
+        f"Please execute the refinement request precisely. "
+        f"Modify the current draft based on: '{latest_user_request}'"
+    )
 
     logging.info(f"Refinement request: {state['refinements'][-1]}")
     logging.info(f"Current draft: {state['drafts'][-1]}")
 
-    result = llm.invoke([SystemMessage(system_prompt), HumanMessage(context)])
+    # Invoke your LLM connection
+    result = llm.invoke([
+        SystemMessage(content=system_prompt), 
+        HumanMessage(content=context)
+    ])
     logging.info(f"Refined compilation draft: {result.content}")
 
     return {
@@ -110,23 +135,14 @@ def Skills_AskRefinements(state : SkillState):
         "current_stage": "pending_refinement_review"
     }
 
-
-def Skills_StoreDB(state:SkillState):
-    # save_section(state['session_id'],"skills",state["drafts"][-1])
+def Skills_StoreDB(state: SkillState):
     final_draft = state["drafts"][-1] if state.get("drafts") else ""
-
-    # Pack the raw string into a dictionary payload
-    # payload = {"skills_content": final_draft}
-    # save_section(state['session_id'], "skills", payload)
-
     structured_data = SkillsPayload(
         skills_raw=final_draft,
         is_approved=state.get("approved", False)
-
-    # .model_dump() converts your Pydantic object into a clean dict
+    )                                          # ← missing this closing bracket
     save_section(state['session_id'], "skills", structured_data.model_dump())
-
-    return {"current_stage":"Completed"}
+    return {"current_stage": "Completed"}
 
 def build_skills_graph():
     graph = StateGraph(SkillState)  # ← create graph INSIDE the function
@@ -142,7 +158,7 @@ def build_skills_graph():
         "approved": "Skills_StoreDB", "refine": "Skills_AskRefinements"
     })
     graph.add_edge("Skills_AskRefinements", "Skills_PresentForReview")
-    graph.add_edge("Skills_PresentForReview", "Skills_PresentForReview")
+    graph.add_edge("Skills_PresentForReview", "Skills_StoreDB")
     graph.add_edge("Skills_StoreDB", END)
     
     return graph
