@@ -28,7 +28,7 @@ class Certifications(BaseModel):
 
 class Resume(BaseModel):
     personalInfo: PersonalInfo = Field(default=None, alias="personal_info")
-    skills: Optional[str] = Field(default=None, alias="skills")
+    skills: Optional[dict] = Field(default=None, alias="skills")
     education:Optional[List[Education]] = Field(default=None, alias="education")
     certificates: Optional[List[Certifications]] = Field(default=None, alias="certificates")
     summary: Optional[str] = Field(default=None, alias="professional_summary")

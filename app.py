@@ -458,22 +458,35 @@ async def start_interview(payload: StartInterviewRequest):
             "What was the percentage increase in request processing speed after implementing your FastAPI solution?",
             "Which specific tools or frameworks beyond FastAPI and LangGraph did you use?",
             "Did you personally design and deploy the LangGraph workflow?"
-        ], # Pre-populated via your LLM generation node step
+        ], 
         "user_answers": {},
         "current_question_index": 0,
         "current_stage": "starting"
     }
+     # Collect all events into a list first
+    all_events = list(skills_app.stream(initial_state, config, stream_mode="values"))
     
-    # Run the graph until it encounters the first single-question interrupt
-    events = skills_app.stream(initial_state, config, stream_mode="values")
+    state_snapshot = skills_app.get_state(config)
     
-    for event in events:
-        if "Skills_ChatInterviewer" in event:
-            state_snapshot = skills_app.get_state(config)
-            if state_snapshot.next: # Verifies graph is currently paused at interrupt
-                return {"status": "paused", "turn_data": state_snapshot.next[0].value}
+    if state_snapshot.next:
+        return {
+            "status": "paused",
+            "turn_data": state_snapshot.tasks[0].interrupts[0].value
+        }
+    
+    # # Run the graph until it encounters the first single-question interrupt
+    # events = skills_app.stream(initial_state, config, stream_mode="values")
+    
+    # for event in events:
+    #     if "Skills_ChatInterviewer" in event:
+    #         state_snapshot = skills_app.get_state(config)
+    #         if state_snapshot.next: # Verifies graph is currently paused at interrupt
+    #             return {"status": "paused", "turn_data": state_snapshot.next[0].value}
                 
-    return {"status": "completed", "final_state": events[-1]}
+    return {"status": "completed", "final_state": all_events[-1] if all_events else {}}
+
+
+
 
 @app.post("/interview/reply")
 async def register_reply(payload: UserReplyRequest):
@@ -493,7 +506,8 @@ async def register_reply(payload: UserReplyRequest):
     if state_snapshot.next:
         return {
             "status": "paused", 
-            "turn_data": state_snapshot.next[0].value
+            # "turn_data": state_snapshot.next[0].value
+             "turn_data": state_snapshot.tasks[0].interrupts[0].value
         }
         
     return {
