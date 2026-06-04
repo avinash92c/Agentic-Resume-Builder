@@ -1,13 +1,15 @@
 from fastapi import FastAPI,HTTPException,Response
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+
+from pydantic import BaseModel
 from model import CertificationsRequest, EducationInfoRequest, PersonalInfo,Education,Certifications,StartRequest,ResumeRequest
 from userrepo import save_section,get_resume_by_email
 import uuid
 from typing import List
 from pymongo.errors import PyMongoError
 from agent_psg import PSG_GRAPH
-from agent_wh import WH_GRAPH
+from agent_wh import WH_GRAPH,WorkExperience
 from agent_pp import PP_GRAPH
 from agent_final import FINAL_GRAPH
 from langgraph.types import Command
@@ -18,6 +20,10 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(levelname)s: %(message)s'
 )
+
+class WorkHistoryStartRequest(BaseModel):
+    email: str
+    user_input: List[WorkExperience]
 
 app = FastAPI()
 app.add_middleware(
@@ -231,7 +237,7 @@ async def view_wh_graph():
     return Response(content=png_bytes, media_type="image/png")
 
 @app.post("/wh/start")
-async def start_wh(request: StartRequest):
+async def start_wh(request: WorkHistoryStartRequest):
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
     resume = get_resume_by_email(request.email)
@@ -242,12 +248,44 @@ async def start_wh(request: StartRequest):
     
     # don't use invoke's return value — get state separately after interrupt
     state = wh_graph.get_state(config)
+    interrupt_data = (
+        state.tasks[0].interrupts[0].value
+    )
     
-    return {
-        "thread_id": thread_id,
-        "stage": state.values["current_stage"],
-        "questions": state.tasks[0].interrupts[0].value["questions"]
-    }
+    # return {
+    #     "thread_id": thread_id,
+    #     "stage": state.values["current_stage"],
+    #     "questions": state.tasks[0].interrupts[0].value["questions"]
+    # }
+    return AgentResponse(
+        thread_id=thread_id,
+        stage=state.values["current_stage"],
+        complete=False,
+        data=map_interrupt_data(interrupt_data)
+    )
+
+# @app.post("/wh/resume")
+# async def resume_wh(request: ResumeRequest):
+#     config = {"configurable": {"thread_id": request.thread_id}}
+    
+#     wh_graph.invoke(
+#         Command(resume=request.user_data),  # not user_input, resume with answers
+#         config=config
+#     )
+    
+#     state = wh_graph.get_state(config)
+#     logging.info(f"Drafts {state}")
+    
+#     # graph may or may not be interrupted again depending on stage
+#     is_interrupted = bool(state.tasks)
+    
+#     return {
+#         "thread_id": request.thread_id,
+#         "stage": state.values["current_stage"],
+#         # "data": state.values["drafts"][-1],
+#         "data": state.tasks[0].interrupts[0].value if is_interrupted else None,
+#         "complete": not is_interrupted
+#     }
 
 @app.post("/wh/resume")
 async def resume_wh(request: ResumeRequest):
@@ -257,20 +295,40 @@ async def resume_wh(request: ResumeRequest):
         Command(resume=request.user_data),  # not user_input, resume with answers
         config=config
     )
-    
+
     state = wh_graph.get_state(config)
     logging.info(f"Drafts {state}")
-    
+
     # graph may or may not be interrupted again depending on stage
     is_interrupted = bool(state.tasks)
+
+    if is_interrupted:
+        interrupt_data = (
+            state.tasks[0].interrupts[0].value
+        )
+
+        logging.info(f"Interrupt Data {interrupt_data}")
+
+        return AgentResponse(
+            thread_id=request.thread_id,
+            stage=state.values["current_stage"],
+            complete=False,
+            data=map_interrupt_data(interrupt_data)
+        )
     
-    return {
-        "thread_id": request.thread_id,
-        "stage": state.values["current_stage"],
-        # "data": state.values["drafts"][-1],
-        "data": state.tasks[0].interrupts[0].value if is_interrupted else None,
-        "complete": not is_interrupted
-    }
+    drafts = state.values.get("drafts", [])
+    latest_draft = drafts[-1] if drafts else None
+
+    return AgentResponse(
+        thread_id=request.thread_id,
+        stage=state.values["current_stage"],
+        complete=True,
+        data=AgentResponseData(
+            message="Work History Summary completed successfully.",
+            draft=latest_draft
+        )
+    )
+
 
 @app.get("/pp/view")
 async def view_pp_graph():

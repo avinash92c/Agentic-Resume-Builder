@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional,List
 
-
 class PersonalInfo(BaseModel):
     name: str = Field(alias="name")
     email: str = Field(alias="email")

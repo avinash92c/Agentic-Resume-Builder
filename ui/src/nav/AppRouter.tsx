@@ -32,6 +32,7 @@ import EducationForm from '../components/EducationForm';
 import CertificationsForm from '../components/CertificationsForm';
 
 import AgentChatPage from '../components/AgentChatPage';
+import WorkHistoryForm from '../components/WorkHistoryForm';
 
 const AppRouter = () => {
     return (
@@ -60,7 +61,7 @@ const AppRouter = () => {
 
             <Route
                 path="/work-experience"
-                element={<AgentChatPage agent="wh" />}
+                element={<WorkHistoryForm />}
             />
 
             <Route

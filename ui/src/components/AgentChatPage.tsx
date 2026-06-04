@@ -28,6 +28,7 @@ const { TextArea } = Input;
 
 interface Props {
     agent: AgentType;
+    existingThreadId?: string;
 }
 
 const AgentChatPage = ({ agent }: Props) => {

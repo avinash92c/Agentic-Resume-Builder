@@ -1,7 +1,10 @@
 import logging
 import json
 import copy
-from typing import List, TypedDict
+from typing import List #, TypedDict
+from typing_extensions import TypedDict
+
+from pydantic import BaseModel
 from dependencies import ConnectLLM, load_prompt, get_checkpointer
 from userrepo import save_section
 from langgraph.types import interrupt
@@ -41,7 +44,8 @@ class WorkHistoryState(MessagesState):
     current_stage: str
 
 class GeneratedQuestionsResult(TypedDict):
-    questions: dict[str, List[str]]
+    # questions: dict[str, List[str]]
+    questions: List[str]
 
 work_history_graph = StateGraph(WorkHistoryState)
 
@@ -63,7 +67,7 @@ def WH_FlattenProjects(state:WorkHistoryState):
         "pending_projects": flattened,
         "current_project_index": 0,
         "drafts": [],
-        "current_state": "flattened_projects"
+        "current_stage": "flattened_projects"
     }
 
 def WH_SelectProject(state:WorkHistoryState):
@@ -71,7 +75,7 @@ def WH_SelectProject(state:WorkHistoryState):
     current_index = state.get("current_project_index", 0)
     return{
         "current_project_index":current_index,
-        "current_state": "select_project"
+        "current_stage": "select_project"
     }
 
 def WH_PrepareQuestions(state:WorkHistoryState):
@@ -140,7 +144,7 @@ def WH_PrepareDraft(state:WorkHistoryState):
     }
 
 def WH_HasMoreProjects(state:WorkHistoryState):
-    if state["current_project_index"]<len(state["pending_projects"])-1:
+    if state["current_project_index"]<len(state["pending_projects"]):
         return "next_project"
     else:
         return "review"
@@ -167,9 +171,11 @@ def WH_PrepareOverallDraft(state:WorkHistoryState):
 
     raw_input_llm = json.dumps(overall_input)
 
+    logging.info(f"WH_PrepareOverallDraft {raw_input_llm}")
+
     messages = [
-        HumanMessage(raw_input_llm),
-        SystemMessage(system_prompt)
+        SystemMessage(system_prompt),
+        HumanMessage(raw_input_llm)
     ]
 
     result = llm.invoke(messages)
@@ -193,7 +199,7 @@ def WH_PresentForReview(state:WorkHistoryState):
         # this gets returned to your UI
         # "drafts": state["drafts"][-1],
         "drafts":draft,
-        "questions":"Review the Draft and provide approval"
+        "approval_question":"Review the Draft and provide approval"
     })
     return {
         # "drafts":[draft],
@@ -253,7 +259,7 @@ def WH_NeedRefinement(state:WorkHistoryState):
 def WH_StoreDB(state:WorkHistoryState):
     # STORE APPROVED DRAFT TO DB
     save_section(state['session_id'],"work_history",state["drafts"][-1])
-    return {"current_stage":"Completed"}
+    return {"current_stage":"completed"}
 
 def build_wh_graph():
     work_history_graph.add_node("WH_FlattenProjects",WH_FlattenProjects)
