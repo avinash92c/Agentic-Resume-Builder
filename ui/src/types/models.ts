@@ -75,3 +75,12 @@ export interface AgentResponse {
     data: Record<string, unknown> | null
     complete: boolean
 }
+
+export interface WorkExperience {
+    company_name: string;
+    job_title: string;
+    start_date: string;
+    end_date: string;
+    employment_type: string;
+    projects: string[];
+}

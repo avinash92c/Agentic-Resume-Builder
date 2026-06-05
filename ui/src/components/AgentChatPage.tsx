@@ -28,6 +28,7 @@ const { TextArea } = Input;
 
 interface Props {
     agent: AgentType;
+    existingThreadId?: string;
 }
 
 const AgentChatPage = ({ agent }: Props) => {
@@ -84,7 +85,7 @@ const AgentChatPage = ({ agent }: Props) => {
             appendUserMessage(initialInput);
 
             const response = await AgentAPI.start(agent, {
-                email: 'rahul@test.com',
+                email: 'JOhn@example.com',
                 user_input: initialInput,
             });
 

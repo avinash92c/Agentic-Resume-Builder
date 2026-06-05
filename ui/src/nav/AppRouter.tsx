@@ -30,8 +30,10 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import PersonalInfoForm from '../components/PersonalInfoForm';
 import EducationForm from '../components/EducationForm';
 import CertificationsForm from '../components/CertificationsForm';
+import Skills from '../components/Skills';
 
 import AgentChatPage from '../components/AgentChatPage';
+import WorkHistoryForm from '../components/WorkHistoryForm';
 
 const AppRouter = () => {
     return (
@@ -60,12 +62,17 @@ const AppRouter = () => {
 
             <Route
                 path="/work-experience"
-                element={<AgentChatPage agent="wh" />}
+                element={<WorkHistoryForm />}
             />
 
             <Route
                 path="/personal-projects"
                 element={<AgentChatPage agent="pp" />}
+            />
+
+            <Route
+                path="/skills"
+                element={<Skills/>}
             />
 
             <Route

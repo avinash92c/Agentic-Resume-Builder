@@ -1,4 +1,4 @@
-export type AgentType = 'psg' | 'wh' | 'pp' | 'fd';
+export type AgentType = 'psg' | 'wh' | 'pp' | 'fd' | 'skills';
 
 export type MessageRole =
     | 'user'
@@ -17,10 +17,10 @@ export interface ChatMessage {
     }[];
 }
 
-export interface StartRequest {
-    email: string;
-    user_input: string;
-}
+// export interface StartRequest {
+//     email: string;
+//     user_input: string;
+// }
 
 export interface ResumeRequest {
     thread_id: string;
@@ -31,10 +31,17 @@ export interface AgentResponse {
     thread_id: string;
     stage?: string;
     complete?: boolean;
+
     data?: {
         draft?: string;
         questions?: string[];
         message?: string;
-        refinement_question?:string;
+        refinement_question?: string;
+        approval_question?: string;
     };
+}
+
+export interface StartRequest<T = unknown> {
+    email: string;
+    user_input: T;
 }
