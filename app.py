@@ -23,6 +23,7 @@ logging.basicConfig(
 )
 
 
+
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -31,8 +32,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-appTwo = FastAPI(title="Agentic Resume Builder Interviewer")
 
 class StartInterviewRequest(BaseModel):
     session_id: str
@@ -386,12 +385,12 @@ async def view_skills_graph():
     png_bytes = skills_app.get_graph().draw_mermaid_png()
     return Response(content=png_bytes, media_type="image/png")
 
-from pydantic import BaseModel
+# from pydantic import BaseModel
 
-class RefineRequest(BaseModel):
-    thread_id: str
-    refinement: str
-    approved: bool = False
+# class RefineRequest(BaseModel):
+#     thread_id: str
+#     refinement: str
+#     approved: bool = False
 
 @app.post("/skills/start")
 async def start_skills(request: StartRequest):
@@ -402,6 +401,7 @@ async def start_skills(request: StartRequest):
     if resume is None:
         raise HTTPException(status_code=404, detail=f"No resume found for email: {request.email}")
     
+    # Initialize the graph
     skills_app.invoke(
         {
             "raw_skills_input": request.user_input,
@@ -415,102 +415,41 @@ async def start_skills(request: StartRequest):
         config=config
     )
     
+    # Fetch the state after the first interrupt (AskQuestions)
     state = skills_app.get_state(config)
     is_interrupted = bool(state.tasks)
 
+    # Safely extract the interrupt payload
+    interrupt_data = state.tasks[0].interrupts[0].value if is_interrupted else None
+
     return {
         "thread_id": thread_id,
-        "stage": state.values["current_stage"],
-        "current_draft": state.values["drafts"][-1] if state.values.get("drafts") else None,
-        "refinement_question": state.tasks[0].interrupts[0].value["message"] if is_interrupted else None,
-        "complete": not is_interrupted
+        "stage": state.values.get("current_stage", "starting"),
+        "complete": not is_interrupted,
+        "data": interrupt_data  # Passes the exact {"action": "...", "questions": [...]} dict to your UI
     }
 
 
 @app.post("/skills/resume")
-async def resume_skills(request: RefineRequest):
+async def resume_skills(request: ResumeRequest): # <-- Using your standard ResumeRequest model
     config = {"configurable": {"thread_id": request.thread_id}}
     
+    # Resume the graph using the dynamic user_data payload from the frontend
     skills_app.invoke(
-        Command(resume={"refinement": request.refinement, "approved": request.approved}),
+        Command(resume=request.user_data), 
         config=config
     )
     
+    # Fetch the new state after the graph pauses again or finishes
     state = skills_app.get_state(config)
     is_interrupted = bool(state.tasks)
 
+    # Safely extract the next interrupt payload
+    interrupt_data = state.tasks[0].interrupts[0].value if is_interrupted else None
+
     return {
         "thread_id": request.thread_id,
-        "stage": state.values["current_stage"],
-        "current_draft": state.values["drafts"][-1] if state.values.get("drafts") else None,
-        "refinement_question": state.tasks[0].interrupts[0].value["message"] if is_interrupted else None,
-        "complete": not is_interrupted
-    }
-
-@app.post("/interview/start")
-async def start_interview(payload: StartInterviewRequest):
-    """Initializes the graph runtime state and generates the 5 core questions."""
-    config = {"configurable": {"thread_id": payload.session_id}}
-    
-    initial_state = {
-        "raw_skills_input": payload.raw_skills_input,
-        "generated_questions": [
-            "What was the percentage increase in request processing speed after implementing your FastAPI solution?",
-            "Which specific tools or frameworks beyond FastAPI and LangGraph did you use?",
-            "Did you personally design and deploy the LangGraph workflow?"
-        ], 
-        "user_answers": {},
-        "current_question_index": 0,
-        "current_stage": "starting"
-    }
-     # Collect all events into a list first
-    all_events = list(skills_app.stream(initial_state, config, stream_mode="values"))
-    
-    state_snapshot = skills_app.get_state(config)
-    
-    if state_snapshot.next:
-        return {
-            "status": "paused",
-            "turn_data": state_snapshot.tasks[0].interrupts[0].value
-        }
-    
-    # # Run the graph until it encounters the first single-question interrupt
-    # events = skills_app.stream(initial_state, config, stream_mode="values")
-    
-    # for event in events:
-    #     if "Skills_ChatInterviewer" in event:
-    #         state_snapshot = skills_app.get_state(config)
-    #         if state_snapshot.next: # Verifies graph is currently paused at interrupt
-    #             return {"status": "paused", "turn_data": state_snapshot.next[0].value}
-                
-    return {"status": "completed", "final_state": all_events[-1] if all_events else {}}
-
-
-
-
-@app.post("/interview/reply")
-async def register_reply(payload: UserReplyRequest):
-    """Resumes the graph thread execution state by injecting the specific turn input."""
-    config = {"configurable": {"thread_id": payload.session_id}}
-    
-    # 🚀 Inject user feedback answer directly to kick off the interrupt block
-    events = skills_app.stream(
-        Command(resume={"answer": payload.user_answer}), 
-        config, 
-        stream_mode="values"
-    )
-    
-    state_snapshot = skills_app.get_state(config)
-    
-    # If the state graph hit another interrupt checkpoint, yield the next item in the queue
-    if state_snapshot.next:
-        return {
-            "status": "paused", 
-            # "turn_data": state_snapshot.next[0].value
-             "turn_data": state_snapshot.tasks[0].interrupts[0].value
-        }
-        
-    return {
-        "status": "interview_session_complete", 
-        "message": "All answers securely saved to Data Lake."
+        "stage": state.values.get("current_stage", "completed"),
+        "complete": not is_interrupted,
+        "data": interrupt_data # Passes {"action": "review_draft"...} or {"action": "request_refinement_feedback"...}
     }
