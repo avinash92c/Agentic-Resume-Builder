@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def ConnectLLM():
-    return ChatOllama(base_url="http://localhost:11434",model="nemotron-3-nano:4b",num_ctx=32768,temperature=0.3)
+    return ChatOllama(base_url="http://localhost:11434",model="nemotron-3-nano:4b",num_ctx=8192,temperature=0.2)
     
 
 client: Optional[MongoClient] = None
