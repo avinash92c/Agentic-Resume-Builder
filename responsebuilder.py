@@ -1,12 +1,56 @@
+from typing import Optional, Any, Dict, List
+
 from model import AgentResponse, AgentResponseData
 
-def map_interrupt_data(interrupt_data: dict) -> AgentResponseData:
+
+def map_interrupt_data(interrupt_data: Optional[Dict[str, Any]]) -> Optional[AgentResponseData]:
+    """Normalize interrupt payloads from different graphs into AgentResponseData.
+
+    Accepts multiple interrupt shapes and returns a consistent AgentResponseData
+    or None when no interrupt payload is provided.
+    """
+    if not interrupt_data or not isinstance(interrupt_data, dict):
+        return None
+
+    action = interrupt_data.get("action")
+
+    # questions: support multiple possible keys
+    questions: List[str] = []
+    for qk in ("questions", "Question", "refinement_questions", "generated_questions"):
+        v = interrupt_data.get(qk)
+        if v:
+            if isinstance(v, list):
+                questions = [str(x) for x in v]
+            else:
+                # sometimes a newline-separated string
+                questions = [s.strip() for s in str(v).split('\n') if s.strip()]
+            break
+
+    # draft: prefer latest element from 'drafts' list, else 'latest_draft' or 'draft'
+    draft_val = None
+    if "drafts" in interrupt_data and isinstance(interrupt_data.get("drafts"), list):
+        drafts_list = interrupt_data.get("drafts")
+        draft_val = drafts_list[-1] if drafts_list else None
+    else:
+        draft_val = interrupt_data.get("latest_draft") or interrupt_data.get("draft")
+
+    # messages and refinement/approval prompts
+    message = interrupt_data.get("message")
+    refinement_question = None
+    approval_question = interrupt_data.get("approval_question")
+
+    if action == "request_refinement_feedback":
+        # message field used for refinement prompt in some graphs
+        refinement_question = message
+        message = None
 
     return AgentResponseData(
-        questions=interrupt_data.get("questions", []),
-        draft=interrupt_data.get("drafts"),
-        approval_question=interrupt_data.get("approval_question"),
-        refinement_question=interrupt_data.get("refinement_question"),
+        action=action,
+        message=message,
+        questions=questions,
+        draft=draft_val,
+        approval_question=approval_question,
+        refinement_question=refinement_question,
     )
 
 def build_agent_response(

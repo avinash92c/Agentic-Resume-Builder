@@ -27,6 +27,20 @@ export interface ResumeRequest {
     user_data: Record<string, any>;
 }
 
+// export interface AgentResponse {
+//     thread_id: string;
+//     stage?: string;
+//     complete?: boolean;
+
+//     data?: {
+//         draft?: string;
+//         questions?: string[];
+//         message?: string;
+//         refinement_question?: string;
+//         approval_question?: string;
+//     };
+// }
+
 export interface AgentResponse {
     thread_id: string;
     stage?: string;
@@ -34,6 +48,8 @@ export interface AgentResponse {
 
     data?: {
         draft?: string;
+        latest_draft?: string;        // ← add this
+        action?: string;              // ← add this
         questions?: string[];
         message?: string;
         refinement_question?: string;

@@ -392,7 +392,72 @@ async def view_skills_graph():
 #     refinement: str
 #     approved: bool = False
 
-@app.post("/skills/start")
+# @app.post("/skills/start")
+# async def start_skills(request: StartRequest):
+#     thread_id = str(uuid.uuid4())
+#     config = {"configurable": {"thread_id": thread_id}}
+    
+#     resume = get_resume_by_email(request.email)
+#     if resume is None:
+#         raise HTTPException(status_code=404, detail=f"No resume found for email: {request.email}")
+    
+#     # Initialize the graph
+#     skills_app.invoke(
+#         {
+#             "raw_skills_input": request.user_input,
+#             "session_id": resume.sessionId,
+#             "drafts": [],
+#             "refinements": [],
+#             "approved": False,
+#             "refinement_counts": 0,
+#             "current_stage": "starting"
+#         },
+#         config=config
+#     )
+    
+#     # Fetch the state after the first interrupt (AskQuestions)
+#     state = skills_app.get_state(config)
+#     is_interrupted = bool(state.tasks)
+
+#     # Safely extract the interrupt payload
+#     interrupt_data = state.tasks[0].interrupts[0].value if is_interrupted else None
+
+#     return {
+#         "thread_id": thread_id,
+#         "stage": state.values.get("current_stage", "starting"),
+#         "complete": not is_interrupted,
+#         "data": interrupt_data  # Passes the exact {"action": "...", "questions": [...]} dict to your UI
+#     }
+
+
+# @app.post("/skills/resume")
+# async def resume_skills(request: ResumeRequest): # <-- Using your standard ResumeRequest model
+#     config = {"configurable": {"thread_id": request.thread_id}}
+    
+#     # Resume the graph using the dynamic user_data payload from the frontend
+#     skills_app.invoke(
+#         Command(resume=request.user_data), 
+#         config=config
+#     )
+    
+#     # Fetch the new state after the graph pauses again or finishes
+#     state = skills_app.get_state(config)
+#     is_interrupted = bool(state.tasks)
+
+#     # Safely extract the next interrupt payload
+#     interrupt_data = state.tasks[0].interrupts[0].value if is_interrupted else None
+
+#     return {
+#         "thread_id": request.thread_id,
+#         "stage": state.values.get("current_stage", "completed"),
+#         "complete": not is_interrupted,
+#         "data": interrupt_data # Passes {"action": "review_draft"...} or {"action": "request_refinement_feedback"...}
+#     }
+
+
+# app.py (Replace your Skills endpoints with this)
+
+@app.post("/skills/start", response_model=AgentResponse)
 async def start_skills(request: StartRequest):
     thread_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
@@ -401,7 +466,6 @@ async def start_skills(request: StartRequest):
     if resume is None:
         raise HTTPException(status_code=404, detail=f"No resume found for email: {request.email}")
     
-    # Initialize the graph
     skills_app.invoke(
         {
             "raw_skills_input": request.user_input,
@@ -415,41 +479,50 @@ async def start_skills(request: StartRequest):
         config=config
     )
     
-    # Fetch the state after the first interrupt (AskQuestions)
     state = skills_app.get_state(config)
     is_interrupted = bool(state.tasks)
+    interrupt_data = state.tasks[0].interrupts[0].value if is_interrupted else {}
 
-    # Safely extract the interrupt payload
-    interrupt_data = state.tasks[0].interrupts[0].value if is_interrupted else None
-
-    return {
-        "thread_id": thread_id,
-        "stage": state.values.get("current_stage", "starting"),
-        "complete": not is_interrupted,
-        "data": interrupt_data  # Passes the exact {"action": "...", "questions": [...]} dict to your UI
-    }
+    return AgentResponse(
+        thread_id=thread_id,
+        stage=state.values.get("current_stage", "starting"),
+        complete=not is_interrupted,
+        data=map_interrupt_data(interrupt_data) if is_interrupted else None
+    )
 
 
-@app.post("/skills/resume")
-async def resume_skills(request: ResumeRequest): # <-- Using your standard ResumeRequest model
+@app.post("/skills/resume", response_model=AgentResponse)
+async def resume_skills(request: ResumeRequest):
     config = {"configurable": {"thread_id": request.thread_id}}
     
-    # Resume the graph using the dynamic user_data payload from the frontend
     skills_app.invoke(
         Command(resume=request.user_data), 
         config=config
     )
     
-    # Fetch the new state after the graph pauses again or finishes
     state = skills_app.get_state(config)
     is_interrupted = bool(state.tasks)
 
-    # Safely extract the next interrupt payload
-    interrupt_data = state.tasks[0].interrupts[0].value if is_interrupted else None
+    # If the graph pauses again (needs more input/review)
+    if is_interrupted:
+        interrupt_data = state.tasks[0].interrupts[0].value
+        return AgentResponse(
+            thread_id=request.thread_id,
+            stage=state.values.get("current_stage", "in_progress"),
+            complete=False,
+            data=map_interrupt_data(interrupt_data)
+        )
+    
+    # If the graph has reached END
+    drafts = state.values.get("drafts", [])
+    latest_draft = drafts[-1] if drafts else None
 
-    return {
-        "thread_id": request.thread_id,
-        "stage": state.values.get("current_stage", "completed"),
-        "complete": not is_interrupted,
-        "data": interrupt_data # Passes {"action": "review_draft"...} or {"action": "request_refinement_feedback"...}
-    }
+    return AgentResponse(
+        thread_id=request.thread_id,
+        stage=state.values.get("current_stage", "Completed"),
+        complete=True,
+        data=AgentResponseData(
+            message="Skills section completed successfully.",
+            draft=latest_draft
+        )
+    )

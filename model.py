@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional,List
+from typing import Optional, List, Any, Dict
 
 
 class PersonalInfo(BaseModel):
@@ -39,12 +39,12 @@ class Resume(BaseModel):
 
 class StartRequest(BaseModel):
     # thread_id: str
-    user_input: str
+    user_input: Any
     email: str
 
 class ResumeRequest(BaseModel):
     thread_id: str
-    user_data: dict  # whatever the UI is sending back
+    user_data: Dict[str, Any] = {}  # whatever the UI is sending back
 
 class EducationInfoRequest(BaseModel):
     education: List[Education]
@@ -55,13 +55,15 @@ class CertificationsRequest(BaseModel):
     email: str
 
 class AgentResponseData(BaseModel):
+    action: Optional[str] = None
     message: Optional[str] = None
-    questions: List[str] = []
+    questions: List[str] = Field(default_factory=list)
     draft: Optional[str] = None
     refinement_question: Optional[str] = None
+    approval_question: Optional[str] = None
 
 class AgentResponse(BaseModel):
     thread_id: str
     stage: str
     complete: bool = False
-    data: AgentResponseData
+    data: Optional[AgentResponseData] = None

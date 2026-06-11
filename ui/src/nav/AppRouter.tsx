@@ -30,10 +30,12 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import PersonalInfoForm from '../components/PersonalInfoForm';
 import EducationForm from '../components/EducationForm';
 import CertificationsForm from '../components/CertificationsForm';
-import Skills from '../components/Skills';
+// import Skills from '../components/Skills';
 
 import AgentChatPage from '../components/AgentChatPage';
 import WorkHistoryForm from '../components/WorkHistoryForm';
+// import SkillsWorkflow from '../components/SkillsWorkflow';
+import SkillsPage from '../components/SkillsWorkflow';
 
 const AppRouter = () => {
     return (
@@ -72,7 +74,7 @@ const AppRouter = () => {
 
             <Route
                 path="/skills"
-                element={<Skills/>}
+                element={<SkillsPage/>}
             />
 
             <Route
