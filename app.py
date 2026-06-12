@@ -257,12 +257,25 @@ async def start_wh(request: WorkHistoryStartRequest):
     #     "stage": state.values["current_stage"],
     #     "questions": state.tasks[0].interrupts[0].value["questions"]
     # }
-    return AgentResponse(
-        thread_id=thread_id,
-        stage=state.values["current_stage"],
-        complete=False,
-        data=map_interrupt_data(interrupt_data)
-    )
+
+    stage = state.values["current_stage"]
+
+    logging.info(f"stage - {stage}")
+
+    if stage != "error":
+        return AgentResponse(
+            thread_id=thread_id,
+            stage=stage,
+            complete=False,
+            data=map_interrupt_data(interrupt_data)
+        )
+    else:
+        logging.exception("WH start failed")
+
+        raise HTTPException(
+            status_code=500,
+            detail=str("error")
+        )
 
 # @app.post("/wh/resume")
 # async def resume_wh(request: ResumeRequest):
@@ -301,6 +314,13 @@ async def resume_wh(request: ResumeRequest):
 
     # graph may or may not be interrupted again depending on stage
     is_interrupted = bool(state.tasks)
+    stage=state.values["current_stage"]
+
+    if stage=="error":
+        raise HTTPException(
+            status_code=500,
+            detail=str("error")
+        )
 
     if is_interrupted:
         interrupt_data = (
@@ -311,7 +331,7 @@ async def resume_wh(request: ResumeRequest):
 
         return AgentResponse(
             thread_id=request.thread_id,
-            stage=state.values["current_stage"],
+            stage=stage,
             complete=False,
             data=map_interrupt_data(interrupt_data)
         )
@@ -321,7 +341,7 @@ async def resume_wh(request: ResumeRequest):
 
     return AgentResponse(
         thread_id=request.thread_id,
-        stage=state.values["current_stage"],
+        stage=stage,
         complete=True,
         data=AgentResponseData(
             message="Work History Summary completed successfully.",
