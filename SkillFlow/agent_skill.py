@@ -124,6 +124,9 @@ def Refine(state: SkillState) -> Literal["StoreDB", "AskRefinements"]:
     """Conditional Edge: Routes based on user approval."""
     if state.get("approved", False):
         return "StoreDB"
+    if state.get("refinement_counts", 0) >= 3:   # ← force approve after 3 refinements
+        logger.warning("Max refinements (3) reached. Auto-approving.")
+        return "StoreDB"
     return "AskRefinements"
 
 def AskRefinements(state: SkillState):
@@ -157,7 +160,6 @@ def StoreDB(state: SkillState):
     save_section(state['session_id'], "skills", payload.model_dump())
     
     return {"current_stage": "Completed"}
-
 
 # --- 3. Graph Builder ---
 

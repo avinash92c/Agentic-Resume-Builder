@@ -35,6 +35,7 @@ import RefinementInput from '../components/agent/RefinementInput';
 const { Content } = Layout;
 const { TextArea } = Input;
 
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type SessionEventKind = 'draft' | 'refinement' | 'approved';
@@ -69,6 +70,8 @@ const SkillsPage = () => {
 
   const [agentStarted, setAgentStarted] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [refinementCount, setRefinementCount] = useState(0);
+  const MAX_REFINEMENTS = 3;
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -98,6 +101,11 @@ const SkillsPage = () => {
   const handleResponse = (data: AgentResponse) => {
     if (!data.data) return;
     const payload = data.data;
+
+    // Sync refinement count from backend stage info
+    if (typeof data.refinement_counts === 'number') {
+      setRefinementCount(data.refinement_counts);
+    }
 
     // Always clear questions first so old form unmounts cleanly
     setQuestions([]);
@@ -244,10 +252,8 @@ const SkillsPage = () => {
     try {
       setLoading(true);
       appendUserMessage(refinement);
-
-      pushSessionEvent('refinement', refinement, 'Refinement Request');
-
-      // Only close after user explicitly submits
+      pushSessionEvent('refinement', refinement, `Refinement Request ${refinementCount + 1}/${MAX_REFINEMENTS}`);
+      setRefinementCount(prev => prev + 1);
       setShowRefinementInput(false);
       setRefinementQuestion('');
 
@@ -460,13 +466,49 @@ const SkillsPage = () => {
           />
         )}
 
-        {/* ── Refinement input ─────────────────────────────────────── */}
         {showRefinementInput && questions.length === 0 && !isCompleted && (
-          <RefinementInput
-            question={refinementQuestion}
-            loading={loading}
-            onSubmit={submitRefinement}
-          />
+          <div style={{ marginTop: 24 }}>
+            <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                Refinements used
+              </Typography.Text>
+              <Space>
+                {[...Array(MAX_REFINEMENTS)].map((_, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      background: i < refinementCount ? '#1677ff' : '#e0e0e0',
+                    }}
+                  />
+                ))}
+                <Typography.Text type={refinementCount >= MAX_REFINEMENTS ? 'danger' : 'secondary'} style={{ fontSize: 12 }}>
+                  {refinementCount}/{MAX_REFINEMENTS}
+                </Typography.Text>
+              </Space>
+            </div>
+
+            {refinementCount >= MAX_REFINEMENTS ? (
+              <Card style={{ borderColor: '#ff7875', background: '#fff2f0' }}>
+                <Space>
+                  <Typography.Text type="danger">
+                    Maximum refinements reached. Please approve the current draft.
+                  </Typography.Text>
+                  <Button type="primary" onClick={approveDraft} loading={loading}>
+                    Approve Draft
+                  </Button>
+                </Space>
+              </Card>
+            ) : (
+              <RefinementInput
+                question={refinementQuestion}
+                loading={loading}
+                onSubmit={submitRefinement}
+              />
+            )}
+          </div>
         )}
 
         {/* ── Completion banner ────────────────────────────────────── */}

@@ -45,6 +45,7 @@ export interface AgentResponse {
     thread_id: string;
     stage?: string;
     complete?: boolean;
+    refinement_counts?: number;
 
     data?: {
         draft?: string;

@@ -1,6 +1,6 @@
 import axios from 'axios';
-
-const API_BASE_URL = 'http://127.0.0.1:8000';
+import { BASEURL } from './BaseAPI';
+import type { AgentResponse } from '../types/agent';
 
 export interface StartSkillsPayload {
   skills_raw: string;
@@ -15,20 +15,12 @@ export interface ResumeSkillsPayload {
   };
 }
 
-export interface AgentResponse {
-  thread_id: string;
-  current_stage: 'interview' | 'review' | 'completed';
-  refinement_questions?: string[];
-  drafts?: string[];
-  refinement_counts?: number;
-}
-
 export const skillsApi = {
   /**
    * Triggers the initial node of the LangGraph state machine
    */
   startWorkflow: async (payload: StartSkillsPayload): Promise<AgentResponse> => {
-    const response = await axios.post(`${API_BASE_URL}/skills/start`, payload);
+    const response = await axios.post(`${BASEURL}/skills/start`, payload);
     return response.data;
   },
 
@@ -36,7 +28,7 @@ export const skillsApi = {
    * Resumes the paused LangGraph workflow with human feedback or answers
    */
   resumeWorkflow: async (payload: ResumeSkillsPayload): Promise<AgentResponse> => {
-    const response = await axios.post(`${API_BASE_URL}/skills/resume`, payload);
+    const response = await axios.post(`${BASEURL}/skills/resume`, payload);
     return response.data;
   },
 };

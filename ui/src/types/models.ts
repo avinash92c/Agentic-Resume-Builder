@@ -59,16 +59,6 @@ export interface CertificationsRequest {
     certifications: Certifications[];
 }
 
-export interface StartRequest {
-    user_input: string
-    email: string
-}
-
-export interface ResumeRequest {
-    thread_id: string
-    user_data: Record<string, unknown>
-}
-
 export interface AgentResponse {
     thread_id: string
     stage: string
